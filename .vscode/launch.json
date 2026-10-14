@@ -1,0 +1,14 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "java",
+			"name": "Pixel Dungeon (Android)",
+			"request": "attach",
+			"hostName": "localhost",
+			"port": 8700,
+			"preLaunchTask": "run-for-debug",
+			"timeout": 60000
+		}
+	]
+}

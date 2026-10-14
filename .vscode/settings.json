@@ -1,0 +1,17 @@
+{
+	"java.import.gradle.enabled": false,
+	"java.project.sourcePaths": [
+		"src",
+		"engine",
+		"build/generated/not_namespaced_r_class_sources/debug/processDebugResources/r",
+		"build/generated/source/buildConfig/debug"
+	],
+	"java.project.outputPath": "bin",
+	"java.project.referencedLibraries": [
+		"libs/**/*.jar"
+	],
+	"java.errors.incompleteClasspath.severity": "ignore",
+	"files.exclude": {
+		"engine/build": true
+	}
+}

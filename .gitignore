@@ -21,6 +21,9 @@ gen/
 .gradle/
 build/
 
+# Local libraries / Android SDK jars
+libs/
+
 # Local configuration file (sdk path, etc)
 local.properties
 

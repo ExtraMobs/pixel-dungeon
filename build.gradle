@@ -1,0 +1,191 @@
+buildscript {
+	repositories {
+		google()
+		jcenter()
+	}
+	dependencies {
+		classpath 'com.android.tools.build:gradle:3.2.1'
+	}
+}
+
+allprojects {
+	repositories {
+		google()
+		jcenter()
+	}
+}
+
+apply plugin: 'com.android.application'
+
+android {
+	compileSdkVersion 22
+	buildToolsVersion '28.0.3'
+
+	defaultConfig {
+		minSdkVersion 9
+		targetSdkVersion 22
+		versionCode 74
+		versionName '1.9.1'
+	}
+
+	sourceSets {
+		main {
+			manifest.srcFile 'AndroidManifest.xml'
+			java.srcDirs = ['src']
+			res.srcDirs = ['res']
+			assets.srcDirs = ['assets']
+		}
+	}
+
+	compileOptions {
+		sourceCompatibility JavaVersion.VERSION_1_7
+		targetCompatibility JavaVersion.VERSION_1_7
+	}
+}
+
+dependencies {
+	implementation project(':engine')
+}
+
+project( ':engine' ) {
+	apply plugin: 'com.android.library'
+
+	android {
+		compileSdkVersion 22
+		buildToolsVersion '28.0.3'
+
+		defaultConfig {
+			minSdkVersion 9
+			targetSdkVersion 22
+		}
+
+		sourceSets {
+			main {
+				manifest.srcFile '../engine-manifest.xml'
+				java.srcDirs = ['.']
+				java.filter.include 'com/**'
+			}
+		}
+
+		compileOptions {
+			sourceCompatibility JavaVersion.VERSION_1_7
+			targetCompatibility JavaVersion.VERSION_1_7
+		}
+	}
+}
+
+// Installs the APK, launches the app waiting for the debugger and forwards JDWP port 8700.
+// Always targets the emulator (starts it if not running). Custom AVD: gradlew runDebug -PavdName=Name
+task runDebug {
+	dependsOn 'assembleDebug'
+	doLast {
+		def win = System.getProperty( 'os.name' ).toLowerCase().contains( 'windows' )
+		def ext = win ? '.exe' : ''
+		def adb = android.sdkDirectory.toString() + '/platform-tools/adb' + ext
+		def emulator = android.sdkDirectory.toString() + '/emulator/emulator' + ext
+		def apk = fileTree( 'build/outputs/apk/debug' ) { include '*-debug.apk' }.singleFile
+		def pkg = 'com.watabou.pixeldungeon'
+
+		def findEmulator = {
+			def devOut = new ByteArrayOutputStream()
+			exec {
+				commandLine adb, 'devices'
+				standardOutput = devOut
+			}
+			def line = devOut.toString().readLines().find { l ->
+				def parts = l.trim().split( '\\s+' )
+				return parts.length >= 2 && parts[0].startsWith( 'emulator-' ) && parts[1] == 'device'
+			}
+			return line ? line.trim().split( '\\s+' )[0] : null
+		}
+
+		def emulatorId = findEmulator()
+		if (!emulatorId) {
+			def avd = project.findProperty( 'avdName' ) ?: 'pd-api28'
+			println '>>> No emulator running; starting emulator ' + avd + '...'
+			new ProcessBuilder( emulator, '-avd', avd.toString() )
+				.redirectErrorStream( true )
+				.redirectOutput( new File( 'build/emulator.log' ) )
+				.start()
+			println '>>> Waiting for emulator to connect...'
+			for (int i = 0; i < 60 && !emulatorId; i++) {
+				sleep 1000
+				emulatorId = findEmulator()
+			}
+			if (!emulatorId) {
+				throw new GradleException( 'Emulator failed to start or connect within 60 seconds' )
+			}
+		}
+
+		println '>>> Target emulator: ' + emulatorId
+		println '>>> Waiting for emulator to finish booting...'
+		for (int i = 0; i < 90; i++) {
+			def boot = new ByteArrayOutputStream()
+			exec {
+				commandLine adb, '-s', emulatorId, 'shell', 'getprop', 'sys.boot_completed'
+				standardOutput = boot
+				ignoreExitValue = true
+			}
+			if (boot.toString().trim() == '1') {
+				break
+			}
+			sleep 2000
+		}
+
+		println '>>> Installing APK on emulator ' + emulatorId + '...'
+		def r = exec {
+			commandLine adb, '-s', emulatorId, 'install', '-r', apk.toString()
+			ignoreExitValue = true
+		}
+		if (r.exitValue != 0) {
+			// Android 14+ refuses to install targetSdk < 23; this flag bypasses it
+			exec {
+				commandLine adb, '-s', emulatorId, 'install', '-r', '--bypass-low-target-sdk-block', apk.toString()
+			}
+		}
+
+		println '>>> Launching app on emulator ' + emulatorId + '...'
+		exec {
+			commandLine adb, '-s', emulatorId, 'shell', 'am', 'start', '-D', '-n', pkg + '/.PixelDungeon'
+			ignoreExitValue = true
+		}
+
+		// ponytail: pidof requires API 24+; for older devices/emulators, use "ps" instead
+		def pid = ''
+		for (int i = 0; i < 30 && !pid; i++) {
+			def out = new ByteArrayOutputStream()
+			exec {
+				commandLine adb, '-s', emulatorId, 'shell', 'pidof', pkg
+				standardOutput = out
+				ignoreExitValue = true
+			}
+			pid = out.toString().trim()
+			if (!pid) {
+				def psOut = new ByteArrayOutputStream()
+				exec {
+					commandLine adb, '-s', emulatorId, 'shell', 'ps'
+					standardOutput = psOut
+					ignoreExitValue = true
+				}
+				def match = psOut.toString().readLines().find { it.contains( pkg ) }
+				if (match) {
+					def parts = match.trim().split( '\\s+' )
+					if (parts.length > 1) {
+						pid = parts[1]
+					}
+				}
+			}
+			if (!pid) {
+				sleep 1000
+			}
+		}
+		if (!pid) {
+			throw new GradleException( 'App did not start on emulator ' + emulatorId )
+		}
+
+		exec {
+			commandLine adb, '-s', emulatorId, 'forward', 'tcp:8700', 'jdwp:' + pid
+		}
+		println '>>> App waiting for debugger on emulator ' + emulatorId + ' (pid ' + pid + ', local port 8700)'
+	}
+}

@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "./gradlew assembleDebug --console=plain",
+			"windows": {
+				"command": ".\\gradlew.bat assembleDebug --console=plain"
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "run-for-debug",
+			"type": "shell",
+			"command": "./gradlew runDebug --console=plain",
+			"windows": {
+				"command": ".\\gradlew.bat runDebug --console=plain"
+			},
+			"detail": "Installs the APK, launches the app waiting for the debugger and forwards port 8700",
+			"problemMatcher": []
+		}
+	]
+}
